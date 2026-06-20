@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from datetime import date
 
 st.set_page_config(page_title="CMS Monumentos Cantabria", layout="wide")
 
@@ -15,7 +16,7 @@ URL_MONUMENTOS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx
 URL_CONTENIDOS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=contenidos"
 
 # =========================================================
-# 2. LOAD DATA
+# 2. CARGA
 # =========================================================
 
 def load_data():
@@ -46,7 +47,7 @@ if not required_cont.issubset(df_cont.columns):
     st.stop()
 
 # =========================================================
-# 4. SELECCIÓN
+# 4. MUNICIPIO
 # =========================================================
 
 municipios = sorted(df_mon["municipio"].dropna().unique())
@@ -58,6 +59,10 @@ if municipio_sel == "":
 
 df_muni = df_mon[df_mon["municipio"] == municipio_sel]
 
+# =========================================================
+# 5. MONUMENTO
+# =========================================================
+
 monumentos = sorted(df_muni["monumento"].dropna().unique())
 
 monumento_sel = st.selectbox("Selecciona monumento", [""] + monumentos)
@@ -66,36 +71,16 @@ if monumento_sel == "":
     st.stop()
 
 # =========================================================
-# 5. FECHA
+# 6. FECHA (CALENDARIO)
 # =========================================================
 
-fecha_texto = st.text_input("Fecha de visita (dd/mm/aaaa)")
+fecha_dt = st.date_input(
+    "Fecha de visita",
+    value=date.today(),
+    format="DD/MM/YYYY"
+)
 
-if fecha_texto == "":
-    st.info("Introduce una fecha")
-    st.stop()
-
-try:
-    fecha_dt = pd.to_datetime(fecha_texto, format="%d/%m/%Y")
-except:
-    st.error("Formato incorrecto (dd/mm/aaaa)")
-    st.stop()
-
-# =========================================================
-# 6. DÍA DE LA SEMANA
-# =========================================================
-
-dias_es = {
-    "Monday": "lunes",
-    "Tuesday": "martes",
-    "Wednesday": "miércoles",
-    "Thursday": "jueves",
-    "Friday": "viernes",
-    "Saturday": "sábado",
-    "Sunday": "domingo"
-}
-
-dia_semana = dias_es[fecha_dt.day_name()]
+fecha_txt = fecha_dt.strftime("%d/%m/%Y")
 
 # =========================================================
 # 7. CONTENIDO
@@ -104,46 +89,39 @@ dia_semana = dias_es[fecha_dt.day_name()]
 df_info = df_cont[df_cont["monumento"] == monumento_sel].copy()
 
 # =========================================================
-# 8. TEMPORADAS CÍCLICAS (MM-DD)
+# 8. PARSEO FECHAS (CON AÑO)
 # =========================================================
 
-def md(date):
-    return (date.month, date.day)
+if "fecha_inicio" in df_info.columns and "fecha_fin" in df_info.columns:
 
-hoy = md(fecha_dt)
+    df_info["fecha_inicio"] = pd.to_datetime(
+        df_info["fecha_inicio"], dayfirst=True, errors="coerce"
+    )
 
-# parse inicio/fin cíclico
-if "inicio" in df_info.columns and "fin" in df_info.columns:
+    df_info["fecha_fin"] = pd.to_datetime(
+        df_info["fecha_fin"], dayfirst=True, errors="coerce"
+    )
 
-    df_info["inicio_dt"] = pd.to_datetime(df_info["inicio"], dayfirst=True, errors="coerce")
-    df_info["fin_dt"] = pd.to_datetime(df_info["fin"], dayfirst=True, errors="coerce")
+# =========================================================
+# 9. MOTOR DE REGLAS (CON AÑO)
+# =========================================================
 
 def es_aplicable(row):
 
-    # si no hay temporada → aplica siempre
-    if "inicio_dt" not in row or pd.isna(row.get("inicio_dt")):
-        return True
+    inicio = row.get("fecha_inicio")
+    fin = row.get("fecha_fin")
 
-    inicio = row.get("inicio_dt")
-    fin = row.get("fin_dt")
-
+    # sin reglas → siempre aplica
     if pd.isna(inicio) and pd.isna(fin):
         return True
 
-    hoy_md = md(fecha_dt)
+    if pd.isna(inicio) and pd.notna(fin):
+        return fecha_dt <= fin
 
-    if pd.notna(inicio) and pd.notna(fin):
-        ini = md(inicio)
-        fn = md(fin)
+    if pd.notna(inicio) and pd.isna(fin):
+        return fecha_dt >= inicio
 
-        # rango normal
-        if ini <= fn:
-            return ini <= hoy_md <= fn
-
-        # rango cruzado año
-        return hoy_md >= ini or hoy_md <= fn
-
-    return True
+    return inicio <= fecha_dt <= fin
 
 
 df_info["aplicable"] = df_info.apply(es_aplicable, axis=1)
@@ -151,23 +129,18 @@ df_info["aplicable"] = df_info.apply(es_aplicable, axis=1)
 df_ok = df_info[df_info["aplicable"]]
 
 # =========================================================
-# 9. OUTPUT
+# 10. OUTPUT
 # =========================================================
 
 st.markdown("---")
 st.markdown(f"# {monumento_sel}")
 
-st.markdown(f"📅 Fecha: **{fecha_texto}**")
-st.markdown(f"📆 Día de la semana: **{dia_semana}**")
-
-# =========================================================
-# 10. RESULTADOS
-# =========================================================
+st.markdown(f"📅 Fecha de visita: **{fecha_txt}**")
 
 st.markdown("## 🟢 Condiciones aplicables")
 
 if df_ok.empty:
-    st.warning("No hay condiciones aplicables")
+    st.warning("No hay condiciones aplicables para esta fecha")
 else:
     for bloque in df_ok["bloque"].dropna().unique():
 
@@ -176,13 +149,4 @@ else:
         sub = df_ok[df_ok["bloque"] == bloque]
 
         for _, row in sub.iterrows():
-
-            texto = row["contenido"]
-
-            # opcional: reglas por día de semana
-            if "dias_semana" in row and pd.notna(row["dias_semana"]):
-                dias = [d.strip().lower() for d in str(row["dias_semana"]).split("-")]
-                if dia_semana not in dias:
-                    continue
-
-            st.write(f"**{row['subtipo']}**: {texto}")
+            st.write(f"**{row['subtipo']}**: {row['contenido']}")
