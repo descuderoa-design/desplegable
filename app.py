@@ -16,7 +16,7 @@ URL_MONUMENTOS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx
 URL_CONTENIDOS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=contenidos"
 
 # =========================================================
-# 2. CARGA DE DATOS (SIN CACHE)
+# 2. CARGA SIN CACHE
 # =========================================================
 
 def load_data():
@@ -32,7 +32,7 @@ def load_data():
 df_mon, df_cont = load_data()
 
 # =========================================================
-# 3. VALIDACIÓN
+# 3. VALIDACIÓN MÍNIMA
 # =========================================================
 
 required_mon = {"monumento", "municipio"}
@@ -47,7 +47,7 @@ if not required_cont.issubset(df_cont.columns):
     st.stop()
 
 # =========================================================
-# 4. MUNICIPIO
+# 4. SELECCIÓN
 # =========================================================
 
 municipios = sorted(df_mon["municipio"].dropna().unique())
@@ -60,10 +60,6 @@ if municipio_sel == "":
 
 df_muni = df_mon[df_mon["municipio"] == municipio_sel]
 
-# =========================================================
-# 5. MONUMENTO
-# =========================================================
-
 monumentos = sorted(df_muni["monumento"].dropna().unique())
 
 monumento_sel = st.selectbox("Selecciona monumento", [""] + monumentos)
@@ -73,72 +69,85 @@ if monumento_sel == "":
     st.stop()
 
 # =========================================================
-# 6. FECHA DE VISITA
+# 5. FECHA
 # =========================================================
 
 fecha_visita = st.date_input("Fecha de visita", value=date.today())
-fecha_visita_txt = fecha_visita.strftime("%d/%m/%Y")
-fecha_visita_dt = pd.to_datetime(fecha_visita)
+fecha_txt = fecha_visita.strftime("%d/%m/%Y")
+
+# convertimos a (mes, día)
+hoy = (fecha_visita.month, fecha_visita.day)
 
 # =========================================================
-# 7. CONTENIDO
+# 6. CONTENIDO
 # =========================================================
 
 df_info = df_cont[df_cont["monumento"] == monumento_sel].copy()
 
 # =========================================================
-# 8. TEMPORADAS SIN AÑO (MMDD)
+# 7. PARSEO FECHAS (SI EXISTEN)
 # =========================================================
-
-def to_mmdd(dt):
-    return int(dt.strftime("%m%d"))
-
-hoy = to_mmdd(fecha_visita_dt)
 
 if "fecha_inicio" in df_info.columns and "fecha_fin" in df_info.columns:
 
-    df_info["fecha_inicio_dt"] = pd.to_datetime(df_info["fecha_inicio"], dayfirst=True, errors="coerce")
-    df_info["fecha_fin_dt"] = pd.to_datetime(df_info["fecha_fin"], dayfirst=True, errors="coerce")
+    df_info["inicio_dt"] = pd.to_datetime(
+        df_info["fecha_inicio"], dayfirst=True, errors="coerce"
+    )
 
-    df_info["inicio_mmdd"] = df_info["fecha_inicio_dt"].dt.strftime("%m%d")
-    df_info["fin_mmdd"] = df_info["fecha_fin_dt"].dt.strftime("%m%d")
+    df_info["fin_dt"] = pd.to_datetime(
+        df_info["fecha_fin"], dayfirst=True, errors="coerce"
+    )
 
-    def es_aplicable(row):
-        if pd.isna(row["inicio_mmdd"]) and pd.isna(row["fin_mmdd"]):
-            return True
+# =========================================================
+# 8. MOTOR DE REGLAS ROBUSTO
+# =========================================================
 
-        inicio = int(row["inicio_mmdd"]) if pd.notna(row["inicio_mmdd"]) else None
-        fin = int(row["fin_mmdd"]) if pd.notna(row["fin_mmdd"]) else None
+def md(dt):
+    return (dt.month, dt.day)
 
-        # caso normal (no cruza año)
-        if inicio is not None and fin is not None and inicio <= fin:
-            return inicio <= hoy <= fin
+def es_aplicable(row):
 
-        # caso temporada cruzando año (ej: invierno 11-03)
-        if inicio is not None and fin is not None:
-            return hoy >= inicio or hoy <= fin
+    inicio = row.get("inicio_dt")
+    fin = row.get("fin_dt")
 
+    # sin reglas → siempre aplica
+    if pd.isna(inicio) and pd.isna(fin):
         return True
 
-    df_info["aplicable"] = df_info.apply(es_aplicable, axis=1)
+    # solo fin
+    if pd.isna(inicio) and pd.notna(fin):
+        return hoy <= md(fin)
 
+    # solo inicio
+    if pd.notna(inicio) and pd.isna(fin):
+        return hoy >= md(inicio)
+
+    ini = md(inicio)
+    fn = md(fin)
+
+    # rango normal
+    if ini <= fn:
+        return ini <= hoy <= fn
+
+    # rango cruzado (invierno)
+    return hoy >= ini or hoy <= fn
+
+
+if "inicio_dt" in df_info.columns:
+    df_info["aplicable"] = df_info.apply(es_aplicable, axis=1)
 else:
     df_info["aplicable"] = True
 
-# =========================================================
-# 9. SPLIT RESULTADOS
-# =========================================================
-
-df_ok = df_info[df_info["aplicable"] == True]
-df_no = df_info[df_info["aplicable"] == False]
+df_ok = df_info[df_info["aplicable"]]
+df_no = df_info[~df_info["aplicable"]]
 
 # =========================================================
-# 10. OUTPUT
+# 9. OUTPUT
 # =========================================================
 
 st.markdown("---")
 st.markdown(f"# {monumento_sel}")
-st.markdown(f"📅 Fecha de visita: **{fecha_visita_txt}**")
+st.markdown(f"📅 Fecha de visita: **{fecha_txt}**")
 
 # -----------------------------
 # APLICABLES
@@ -166,7 +175,7 @@ st.markdown("---")
 st.markdown("## 🔴 Condiciones no aplicables")
 
 if df_no.empty:
-    st.info("No hay condiciones fuera de temporada")
+    st.info("No hay condiciones fuera de esta fecha")
 else:
     for bloque in df_no["bloque"].dropna().unique():
 
