@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-from datetime import date
 
 st.set_page_config(page_title="CMS Monumentos Cantabria", layout="wide")
 
@@ -51,7 +50,6 @@ if not required_cont.issubset(df_cont.columns):
 # =========================================================
 
 municipios = sorted(df_mon["municipio"].dropna().unique())
-
 municipio_sel = st.selectbox("Selecciona municipio", [""] + municipios)
 
 if municipio_sel == "":
@@ -65,7 +63,6 @@ df_muni = df_mon[df_mon["municipio"] == municipio_sel]
 # =========================================================
 
 monumentos = sorted(df_muni["monumento"].dropna().unique())
-
 monumento_sel = st.selectbox("Selecciona monumento", [""] + monumentos)
 
 if monumento_sel == "":
@@ -73,22 +70,25 @@ if monumento_sel == "":
     st.stop()
 
 # =========================================================
-# 6. FECHA (SIN VALOR POR DEFECTO)
+# 6. FECHA MANUAL (SIN FECHA POR DEFECTO)
 # =========================================================
 
-usar_fecha = st.checkbox("Seleccionar fecha de visita")
+fecha_texto = st.text_input("Fecha de visita (dd/mm/aaaa)")
 
-if not usar_fecha:
-    st.info("Selecciona una fecha para continuar")
+if fecha_texto == "":
+    st.info("Introduce una fecha de visita")
     st.stop()
 
-fecha_visita = st.date_input(
-    "Fecha de visita",
-    min_value=date.today()
-)
+try:
+    fecha_dt = pd.to_datetime(fecha_texto, format="%d/%m/%Y")
+except:
+    st.error("Formato incorrecto. Usa dd/mm/aaaa")
+    st.stop()
 
-fecha_txt = fecha_visita.strftime("%d/%m/%Y")
-fecha_dt = pd.to_datetime(fecha_visita)
+# impedir fechas pasadas
+if fecha_dt.date() < pd.Timestamp.today().date():
+    st.error("No se permiten fechas pasadas")
+    st.stop()
 
 # =========================================================
 # 7. FILTRADO CONTENIDO
@@ -132,9 +132,7 @@ def es_aplicable(row):
 
 
 df_info["aplicable"] = df_info.apply(es_aplicable, axis=1)
-
 df_ok = df_info[df_info["aplicable"]]
-df_no = df_info[~df_info["aplicable"]]
 
 # =========================================================
 # 10. OUTPUT
@@ -142,13 +140,9 @@ df_no = df_info[~df_info["aplicable"]]
 
 st.markdown("---")
 st.markdown(f"# {monumento_sel}")
-st.markdown(f"📅 Fecha de visita: **{fecha_txt}**")
+st.markdown(f"📅 Fecha de visita: **{fecha_texto}**")
 
-# -----------------------------
-# APLICABLES
-# -----------------------------
-
-st.markdown("## 🟢 Condiciones aplicables")
+st.markdown("## Condiciones aplicables")
 
 if df_ok.empty:
     st.warning("No hay condiciones aplicables para esta fecha")
@@ -157,24 +151,6 @@ else:
         st.markdown(f"### {bloque.capitalize()}")
 
         sub = df_ok[df_ok["bloque"] == bloque]
-
-        for _, row in sub.iterrows():
-            st.write(f"**{row['subtipo']}**: {row['contenido']}")
-
-# -----------------------------
-# NO APLICABLES
-# -----------------------------
-
-st.markdown("---")
-st.markdown("## 🔴 Condiciones no aplicables")
-
-if df_no.empty:
-    st.info("No hay condiciones fuera de esta fecha")
-else:
-    for bloque in df_no["bloque"].dropna().unique():
-        st.markdown(f"### {bloque.capitalize()}")
-
-        sub = df_no[df_no["bloque"] == bloque]
 
         for _, row in sub.iterrows():
             st.write(f"**{row['subtipo']}**: {row['contenido']}")
