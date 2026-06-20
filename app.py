@@ -37,21 +37,18 @@ df_mon, df_cont = load_data()
 # =========================================================
 
 required_mon = {"monumento", "municipio"}
-required_cont = {"monumento", "bloque", "subtipo", "contenido", "fecha_inicio", "fecha_fin"}
+required_cont = {"monumento", "bloque", "subtipo", "contenido"}
 
-missing_mon = required_mon - set(df_mon.columns)
-missing_cont = required_cont - set(df_cont.columns)
-
-if missing_mon:
-    st.error(f"Faltan columnas en monumentos: {missing_mon}")
+if not required_mon.issubset(df_mon.columns):
+    st.error(f"Error columnas monumentos: {df_mon.columns}")
     st.stop()
 
-if missing_cont:
-    st.error(f"Faltan columnas en contenidos: {missing_cont}")
+if not required_cont.issubset(df_cont.columns):
+    st.error(f"Error columnas contenidos: {df_cont.columns}")
     st.stop()
 
 # =========================================================
-# 4. SELECCIÓN MUNICIPIO
+# 4. MUNICIPIO (NO MUESTRA NADA INICIALMENTE)
 # =========================================================
 
 municipios = sorted(df_mon["municipio"].dropna().unique())
@@ -65,7 +62,7 @@ if municipio_sel == "":
 df_muni = df_mon[df_mon["municipio"] == municipio_sel]
 
 # =========================================================
-# 5. SELECCIÓN MONUMENTO
+# 5. MONUMENTO
 # =========================================================
 
 monumentos = sorted(df_muni["monumento"].dropna().unique())
@@ -77,37 +74,44 @@ if monumento_sel == "":
     st.stop()
 
 # =========================================================
-# 6. FECHA DE VISITA (VARIABLE DE REGLA)
+# 6. FECHA DE VISITA (FORMATO EUROPEO VISUAL)
 # =========================================================
 
 fecha_visita = st.date_input("Selecciona fecha de visita", value=date.today())
+
+# formato para mostrar
+fecha_visita_mostrar = fecha_visita.strftime("%d/%m/%Y")
+
+# formato interno para lógica
 fecha_visita = pd.to_datetime(fecha_visita)
 
 # =========================================================
-# 7. FILTRAR CONTENIDO POR MONUMENTO
+# 7. FILTRADO CONTENIDO
 # =========================================================
 
 df_info = df_cont[df_cont["monumento"] == monumento_sel].copy()
 
 # =========================================================
-# 8. MOTOR DE REGLAS POR FECHA
+# 8. MOTOR DE REGLAS POR FECHA (OPCIONAL)
 # =========================================================
 
-df_info["fecha_inicio"] = pd.to_datetime(df_info["fecha_inicio"], errors="coerce")
-df_info["fecha_fin"] = pd.to_datetime(df_info["fecha_fin"], errors="coerce")
+if "fecha_inicio" in df_info.columns and "fecha_fin" in df_info.columns:
 
-df_info = df_info[
-    (df_info["fecha_inicio"].isna() | (df_info["fecha_inicio"] <= fecha_visita)) &
-    (df_info["fecha_fin"].isna() | (df_info["fecha_fin"] >= fecha_visita))
-]
+    df_info["fecha_inicio"] = pd.to_datetime(df_info["fecha_inicio"], errors="coerce")
+    df_info["fecha_fin"] = pd.to_datetime(df_info["fecha_fin"], errors="coerce")
+
+    df_info = df_info[
+        (df_info["fecha_inicio"].isna() | (df_info["fecha_inicio"] <= fecha_visita)) &
+        (df_info["fecha_fin"].isna() | (df_info["fecha_fin"] >= fecha_visita))
+    ]
 
 # =========================================================
-# 9. FICHA FINAL
+# 9. FICHA PRINCIPAL
 # =========================================================
 
 st.markdown("---")
 st.markdown(f"# {monumento_sel}")
-st.markdown(f"📅 Fecha de visita: **{fecha_visita.date()}**")
+st.markdown(f"📅 Fecha de visita: **{fecha_visita_mostrar}**")
 
 # =========================================================
 # 10. RENDER LIMPIO POR BLOQUES
@@ -129,9 +133,16 @@ else:
             {row['contenido']}
             """)
 
+            if "fuente" in row and pd.notna(row["fuente"]):
+                st.caption(f"Fuente: {row['fuente']}")
+
 # =========================================================
-# 11. DEBUG OPCIONAL
+# 11. DEBUG (OCULTO)
 # =========================================================
 
-with st.expander("Datos filtrados (debug)"):
+with st.expander("Datos técnicos"):
+    st.write("Monumentos filtrados")
+    st.dataframe(df_muni)
+
+    st.write("Contenido filtrado")
     st.dataframe(df_info)
