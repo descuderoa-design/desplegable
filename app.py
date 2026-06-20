@@ -47,7 +47,7 @@ if not required_cont.issubset(df_cont.columns):
     st.stop()
 
 # =========================================================
-# 4. SELECCIÓN
+# 4. SELECCIÓN MUNICIPIO
 # =========================================================
 
 municipios = sorted(df_mon["municipio"].dropna().unique())
@@ -55,10 +55,14 @@ municipios = sorted(df_mon["municipio"].dropna().unique())
 municipio_sel = st.selectbox("Selecciona municipio", [""] + municipios)
 
 if municipio_sel == "":
-    st.info("Selecciona un municipio")
+    st.info("Selecciona un municipio para comenzar")
     st.stop()
 
 df_muni = df_mon[df_mon["municipio"] == municipio_sel]
+
+# =========================================================
+# 5. SELECCIÓN MONUMENTO
+# =========================================================
 
 monumentos = sorted(df_muni["monumento"].dropna().unique())
 
@@ -69,21 +73,28 @@ if monumento_sel == "":
     st.stop()
 
 # =========================================================
-# 5. FECHA
+# 6. FECHA (BLOQUEO PASADO)
 # =========================================================
 
-fecha_visita = st.date_input("Fecha de visita", value=date.today())
+hoy = date.today()
+
+fecha_visita = st.date_input(
+    "Fecha de visita",
+    value=hoy,
+    min_value=hoy
+)
+
 fecha_txt = fecha_visita.strftime("%d/%m/%Y")
 fecha_dt = pd.to_datetime(fecha_visita)
 
 # =========================================================
-# 6. CONTENIDO
+# 7. FILTRADO CONTENIDO
 # =========================================================
 
 df_info = df_cont[df_cont["monumento"] == monumento_sel].copy()
 
 # =========================================================
-# 7. PARSEO FECHAS (CON AÑO)
+# 8. PARSEO FECHAS (CON AÑO)
 # =========================================================
 
 if "fecha_inicio" in df_info.columns and "fecha_fin" in df_info.columns:
@@ -97,7 +108,7 @@ if "fecha_inicio" in df_info.columns and "fecha_fin" in df_info.columns:
     )
 
 # =========================================================
-# 8. MOTOR DE REGLAS (CON AÑO)
+# 9. MOTOR DE REGLAS
 # =========================================================
 
 def es_aplicable(row):
@@ -105,16 +116,19 @@ def es_aplicable(row):
     inicio = row.get("fecha_inicio")
     fin = row.get("fecha_fin")
 
-    # sin reglas → siempre aplica
+    # sin fechas → siempre aplica
     if pd.isna(inicio) and pd.isna(fin):
         return True
 
+    # solo fin
     if pd.isna(inicio) and pd.notna(fin):
         return fecha_dt <= fin
 
+    # solo inicio
     if pd.notna(inicio) and pd.isna(fin):
         return fecha_dt >= inicio
 
+    # rango completo
     return inicio <= fecha_dt <= fin
 
 
@@ -124,7 +138,7 @@ df_ok = df_info[df_info["aplicable"] == True]
 df_no = df_info[df_info["aplicable"] == False]
 
 # =========================================================
-# 9. OUTPUT
+# 10. OUTPUT
 # =========================================================
 
 st.markdown("---")
@@ -138,7 +152,7 @@ st.markdown(f"📅 Fecha de visita: **{fecha_txt}**")
 st.markdown("## 🟢 Condiciones aplicables")
 
 if df_ok.empty:
-    st.warning("No hay condiciones aplicables")
+    st.warning("No hay condiciones aplicables para esta fecha")
 else:
     for bloque in df_ok["bloque"].dropna().unique():
 
@@ -167,3 +181,10 @@ else:
 
         for _, row in sub.iterrows():
             st.write(f"**{row['subtipo']}**: {row['contenido']}")
+
+# =========================================================
+# 11. DEBUG
+# =========================================================
+
+with st.expander("Datos técnicos"):
+    st.dataframe(df_info)
