@@ -16,7 +16,7 @@ URL_MONUMENTOS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx
 URL_CONTENIDOS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=contenidos"
 
 # =========================================================
-# 2. LOAD DATA
+# 2. CARGA
 # =========================================================
 
 def load_data():
@@ -71,18 +71,15 @@ if monumento_sel == "":
     st.stop()
 
 # =========================================================
-# 6. FECHA (RESTRICCIONES)
+# 6. FECHA
 # =========================================================
-
-hoy = date.today()
-max_fecha = date(hoy.year + 2, hoy.month, hoy.day)
 
 fecha_dt = pd.Timestamp(
     st.date_input(
         "Fecha de visita",
-        value=hoy,
-        min_value=hoy,
-        max_value=max_fecha,
+        value=date.today(),
+        min_value=date.today(),
+        max_value=date(date.today().year + 2, date.today().month, date.today().day),
         format="DD/MM/YYYY"
     )
 )
@@ -112,7 +109,7 @@ dia_semana = dias_es[fecha_dt.day_name()]
 df_info = df_cont[df_cont["monumento"] == monumento_sel].copy()
 
 # =========================================================
-# 9. PARSEO FECHAS
+# 9. FECHAS (TEMPORADAS)
 # =========================================================
 
 if "fecha_inicio" in df_info.columns and "fecha_fin" in df_info.columns:
@@ -125,11 +122,7 @@ if "fecha_inicio" in df_info.columns and "fecha_fin" in df_info.columns:
         df_info["fecha_fin"], dayfirst=True, errors="coerce"
     )
 
-# =========================================================
-# 10. MOTOR DE REGLAS
-# =========================================================
-
-def es_aplicable(row):
+def cumple_fecha(row):
 
     inicio = row.get("fecha_inicio")
     fin = row.get("fecha_fin")
@@ -145,10 +138,23 @@ def es_aplicable(row):
 
     return inicio <= fecha_dt <= fin
 
+df_info = df_info[df_info.apply(cumple_fecha, axis=1)]
 
-df_info["aplicable"] = df_info.apply(es_aplicable, axis=1)
+# =========================================================
+# 10. FILTRO DÍAS DE LA SEMANA
+# =========================================================
 
-df_ok = df_info[df_info["aplicable"]]
+def cumple_dia(row):
+
+    if "dias_semana" not in row or pd.isna(row["dias_semana"]):
+        return True
+
+    dias = [d.strip().lower() for d in str(row["dias_semana"]).split("-")]
+
+    return dia_semana in dias
+
+
+df_info = df_info[df_info.apply(cumple_dia, axis=1)]
 
 # =========================================================
 # 11. OUTPUT
@@ -160,16 +166,16 @@ st.markdown(f"# {monumento_sel}")
 st.markdown(f"📅 Fecha: **{fecha_txt}**")
 st.markdown(f"📆 Día de la semana: **{dia_semana}**")
 
-st.markdown("## 🟢 Condiciones aplicables")
+st.markdown("## 🟢 Información aplicable")
 
-if df_ok.empty:
-    st.warning("No hay condiciones aplicables para esta fecha")
+if df_info.empty:
+    st.warning("No hay información aplicable para esta fecha")
 else:
-    for bloque in df_ok["bloque"].dropna().unique():
+    for bloque in df_info["bloque"].dropna().unique():
 
         st.markdown(f"### {bloque.capitalize()}")
 
-        sub = df_ok[df_ok["bloque"] == bloque]
+        sub = df_info[df_info["bloque"] == bloque]
 
         for _, row in sub.iterrows():
             st.write(f"**{row['subtipo']}**: {row['contenido']}")
