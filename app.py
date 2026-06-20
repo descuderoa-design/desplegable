@@ -16,7 +16,7 @@ URL_MONUMENTOS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx
 URL_CONTENIDOS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=contenidos"
 
 # =========================================================
-# 2. CARGA
+# 2. LOAD DATA
 # =========================================================
 
 def load_data():
@@ -74,10 +74,12 @@ if monumento_sel == "":
 # 6. FECHA (CALENDARIO)
 # =========================================================
 
-fecha_dt = st.date_input(
-    "Fecha de visita",
-    value=date.today(),
-    format="DD/MM/YYYY"
+fecha_dt = pd.Timestamp(
+    st.date_input(
+        "Fecha de visita",
+        value=date.today(),
+        format="DD/MM/YYYY"
+    )
 )
 
 fecha_txt = fecha_dt.strftime("%d/%m/%Y")
@@ -89,7 +91,7 @@ fecha_txt = fecha_dt.strftime("%d/%m/%Y")
 df_info = df_cont[df_cont["monumento"] == monumento_sel].copy()
 
 # =========================================================
-# 8. PARSEO FECHAS (CON AÑO)
+# 8. PARSEO FECHAS
 # =========================================================
 
 if "fecha_inicio" in df_info.columns and "fecha_fin" in df_info.columns:
@@ -103,7 +105,7 @@ if "fecha_inicio" in df_info.columns and "fecha_fin" in df_info.columns:
     )
 
 # =========================================================
-# 9. MOTOR DE REGLAS (CON AÑO)
+# 9. MOTOR DE REGLAS
 # =========================================================
 
 def es_aplicable(row):
