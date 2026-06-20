@@ -32,7 +32,7 @@ def load_data():
 df_mon, df_cont = load_data()
 
 # =========================================================
-# 3. VALIDACIÓN MÍNIMA
+# 3. VALIDACIÓN
 # =========================================================
 
 required_mon = {"monumento", "municipio"}
@@ -55,7 +55,7 @@ municipios = sorted(df_mon["municipio"].dropna().unique())
 municipio_sel = st.selectbox("Selecciona municipio", [""] + municipios)
 
 if municipio_sel == "":
-    st.info("Selecciona un municipio para comenzar")
+    st.info("Selecciona un municipio")
     st.stop()
 
 df_muni = df_mon[df_mon["municipio"] == municipio_sel]
@@ -74,9 +74,7 @@ if monumento_sel == "":
 
 fecha_visita = st.date_input("Fecha de visita", value=date.today())
 fecha_txt = fecha_visita.strftime("%d/%m/%Y")
-
-# convertimos a (mes, día)
-hoy = (fecha_visita.month, fecha_visita.day)
+fecha_dt = pd.to_datetime(fecha_visita)
 
 # =========================================================
 # 6. CONTENIDO
@@ -85,61 +83,45 @@ hoy = (fecha_visita.month, fecha_visita.day)
 df_info = df_cont[df_cont["monumento"] == monumento_sel].copy()
 
 # =========================================================
-# 7. PARSEO FECHAS (SI EXISTEN)
+# 7. PARSEO FECHAS (CON AÑO)
 # =========================================================
 
 if "fecha_inicio" in df_info.columns and "fecha_fin" in df_info.columns:
 
-    df_info["inicio_dt"] = pd.to_datetime(
+    df_info["fecha_inicio"] = pd.to_datetime(
         df_info["fecha_inicio"], dayfirst=True, errors="coerce"
     )
 
-    df_info["fin_dt"] = pd.to_datetime(
+    df_info["fecha_fin"] = pd.to_datetime(
         df_info["fecha_fin"], dayfirst=True, errors="coerce"
     )
 
 # =========================================================
-# 8. MOTOR DE REGLAS ROBUSTO
+# 8. MOTOR DE REGLAS (CON AÑO)
 # =========================================================
-
-def md(dt):
-    return (dt.month, dt.day)
 
 def es_aplicable(row):
 
-    inicio = row.get("inicio_dt")
-    fin = row.get("fin_dt")
+    inicio = row.get("fecha_inicio")
+    fin = row.get("fecha_fin")
 
     # sin reglas → siempre aplica
     if pd.isna(inicio) and pd.isna(fin):
         return True
 
-    # solo fin
     if pd.isna(inicio) and pd.notna(fin):
-        return hoy <= md(fin)
+        return fecha_dt <= fin
 
-    # solo inicio
     if pd.notna(inicio) and pd.isna(fin):
-        return hoy >= md(inicio)
+        return fecha_dt >= inicio
 
-    ini = md(inicio)
-    fn = md(fin)
-
-    # rango normal
-    if ini <= fn:
-        return ini <= hoy <= fn
-
-    # rango cruzado (invierno)
-    return hoy >= ini or hoy <= fn
+    return inicio <= fecha_dt <= fin
 
 
-if "inicio_dt" in df_info.columns:
-    df_info["aplicable"] = df_info.apply(es_aplicable, axis=1)
-else:
-    df_info["aplicable"] = True
+df_info["aplicable"] = df_info.apply(es_aplicable, axis=1)
 
-df_ok = df_info[df_info["aplicable"]]
-df_no = df_info[~df_info["aplicable"]]
+df_ok = df_info[df_info["aplicable"] == True]
+df_no = df_info[df_info["aplicable"] == False]
 
 # =========================================================
 # 9. OUTPUT
