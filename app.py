@@ -64,7 +64,7 @@ fecha_visita = pd.to_datetime(fecha_visita)
 df_info = df_cont[df_cont["monumento"] == monumento_sel].copy()
 
 # =========================================================
-# 6. MOTOR DE REGLAS
+# 6. FECHAS A DATETIME
 # =========================================================
 
 if "fecha_inicio" in df_info.columns and "fecha_fin" in df_info.columns:
@@ -72,13 +72,33 @@ if "fecha_inicio" in df_info.columns and "fecha_fin" in df_info.columns:
     df_info["fecha_inicio"] = pd.to_datetime(df_info["fecha_inicio"], errors="coerce")
     df_info["fecha_fin"] = pd.to_datetime(df_info["fecha_fin"], errors="coerce")
 
-    df_info = df_info[
-        (df_info["fecha_inicio"].isna() | (df_info["fecha_inicio"] <= fecha_visita)) &
-        (df_info["fecha_fin"].isna() | (df_info["fecha_fin"] >= fecha_visita))
-    ]
+# =========================================================
+# 7. DIVISIÓN APLICABLE / NO APLICABLE
+# =========================================================
+
+def es_aplicable(row):
+    inicio = row.get("fecha_inicio")
+    fin = row.get("fecha_fin")
+
+    if pd.isna(inicio) and pd.isna(fin):
+        return True
+
+    if pd.isna(inicio):
+        return fecha_visita <= fin
+
+    if pd.isna(fin):
+        return fecha_visita >= inicio
+
+    return inicio <= fecha_visita <= fin
+
+
+df_info["aplicable"] = df_info.apply(es_aplicable, axis=1)
+
+df_ok = df_info[df_info["aplicable"] == True]
+df_no = df_info[df_info["aplicable"] == False]
 
 # =========================================================
-# 7. OUTPUT ESTRUCTURADO (CLAVE)
+# 8. CABECERA
 # =========================================================
 
 st.markdown("---")
@@ -86,32 +106,41 @@ st.markdown(f"# {monumento_sel}")
 st.markdown(f"📅 Fecha: {fecha_visita.date()}")
 
 # =========================================================
-# 8. TARIFAS Y HORARIOS SEPARADOS
+# 9. APLICABLES
 # =========================================================
 
-horarios = df_info[df_info["bloque"].str.lower() == "horarios"]
-tarifas = df_info[df_info["bloque"].str.lower() == "tarifas"]
+st.markdown("## 🟢 Condiciones aplicables")
 
-# =========================================================
-# 9. MOSTRAR HORARIOS
-# =========================================================
-
-st.markdown("## 🕒 Horarios aplicables")
-
-if horarios.empty:
-    st.warning("No hay horarios para esta fecha")
+if df_ok.empty:
+    st.warning("No hay condiciones aplicables")
 else:
-    for _, row in horarios.iterrows():
-        st.write(f"**{row['subtipo']}**: {row['contenido']}")
+    for bloque in df_ok["bloque"].dropna().unique():
+
+        st.markdown(f"### {bloque.capitalize()}")
+
+        sub = df_ok[df_ok["bloque"] == bloque]
+
+        for _, row in sub.iterrows():
+            st.write(f"**{row['subtipo']}**: {row['contenido']}")
 
 # =========================================================
-# 10. MOSTRAR TARIFAS
+# 10. NO APLICABLES
 # =========================================================
 
-st.markdown("## 💶 Tarifas aplicables")
+st.markdown("---")
+st.markdown("## 🔴 Condiciones no aplicables")
 
-if tarifas.empty:
-    st.warning("No hay tarifas para esta fecha")
+if df_no.empty:
+    st.info("No hay condiciones fuera de la fecha seleccionada")
 else:
-    for _, row in tarifas.iterrows():
-        st.write(f"**{row['subtipo']}**: {row['contenido']}")
+    for bloque in df_no["bloque"].dropna().unique():
+
+        st.markdown(f"### {bloque.capitalize()}")
+
+        sub = df_no[df_no["bloque"] == bloque]
+
+        for _, row in sub.iterrows():
+            st.write(f"**{row['subtipo']}**: {row['contenido']}")
+
+            if "fecha_inicio" in row and "fecha_fin" in row:
+                st.caption(f"Vigencia: {row['fecha_inicio']} → {row['fecha_fin']}")
