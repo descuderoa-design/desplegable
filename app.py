@@ -16,7 +16,7 @@ URL_MONUMENTOS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx
 URL_CONTENIDOS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=contenidos"
 
 # =========================================================
-# 2. CARGA DE DATOS
+# 2. LOAD DATA
 # =========================================================
 
 @st.cache_data
@@ -33,66 +33,38 @@ def load_data():
 df_mon, df_cont = load_data()
 
 # =========================================================
-# 3. VALIDACIÓN MÍNIMA
-# =========================================================
-
-required_mon = {"monumento", "municipio"}
-required_cont = {"monumento", "bloque", "subtipo", "contenido"}
-
-if not required_mon.issubset(df_mon.columns):
-    st.error(f"Error columnas monumentos: {df_mon.columns}")
-    st.stop()
-
-if not required_cont.issubset(df_cont.columns):
-    st.error(f"Error columnas contenidos: {df_cont.columns}")
-    st.stop()
-
-# =========================================================
-# 4. MUNICIPIO (NO MUESTRA NADA INICIALMENTE)
+# 3. SELECCIÓN
 # =========================================================
 
 municipios = sorted(df_mon["municipio"].dropna().unique())
-
-municipio_sel = st.selectbox("Selecciona municipio", [""] + municipios)
+municipio_sel = st.selectbox("Municipio", [""] + municipios)
 
 if municipio_sel == "":
-    st.info("Selecciona un municipio para comenzar")
     st.stop()
 
 df_muni = df_mon[df_mon["municipio"] == municipio_sel]
 
-# =========================================================
-# 5. MONUMENTO
-# =========================================================
-
 monumentos = sorted(df_muni["monumento"].dropna().unique())
-
-monumento_sel = st.selectbox("Selecciona monumento", [""] + monumentos)
+monumento_sel = st.selectbox("Monumento", [""] + monumentos)
 
 if monumento_sel == "":
-    st.info("Selecciona un monumento")
     st.stop()
 
 # =========================================================
-# 6. FECHA DE VISITA (FORMATO EUROPEO VISUAL)
+# 4. FECHA
 # =========================================================
 
-fecha_visita = st.date_input("Selecciona fecha de visita", value=date.today())
-
-# formato para mostrar
-fecha_visita_mostrar = fecha_visita.strftime("%d/%m/%Y")
-
-# formato interno para lógica
+fecha_visita = st.date_input("Fecha de visita", value=date.today())
 fecha_visita = pd.to_datetime(fecha_visita)
 
 # =========================================================
-# 7. FILTRADO CONTENIDO
+# 5. FILTRO BASE
 # =========================================================
 
 df_info = df_cont[df_cont["monumento"] == monumento_sel].copy()
 
 # =========================================================
-# 8. MOTOR DE REGLAS POR FECHA (OPCIONAL)
+# 6. MOTOR DE REGLAS
 # =========================================================
 
 if "fecha_inicio" in df_info.columns and "fecha_fin" in df_info.columns:
@@ -106,43 +78,40 @@ if "fecha_inicio" in df_info.columns and "fecha_fin" in df_info.columns:
     ]
 
 # =========================================================
-# 9. FICHA PRINCIPAL
+# 7. OUTPUT ESTRUCTURADO (CLAVE)
 # =========================================================
 
 st.markdown("---")
 st.markdown(f"# {monumento_sel}")
-st.markdown(f"📅 Fecha de visita: **{fecha_visita_mostrar}**")
+st.markdown(f"📅 Fecha: {fecha_visita.date()}")
 
 # =========================================================
-# 10. RENDER LIMPIO POR BLOQUES
+# 8. TARIFAS Y HORARIOS SEPARADOS
 # =========================================================
 
-if df_info.empty:
-    st.warning("No hay información disponible para esta fecha")
+horarios = df_info[df_info["bloque"].str.lower() == "horarios"]
+tarifas = df_info[df_info["bloque"].str.lower() == "tarifas"]
+
+# =========================================================
+# 9. MOSTRAR HORARIOS
+# =========================================================
+
+st.markdown("## 🕒 Horarios aplicables")
+
+if horarios.empty:
+    st.warning("No hay horarios para esta fecha")
 else:
-    for bloque in df_info["bloque"].dropna().unique():
-
-        st.markdown(f"## {bloque.capitalize()}")
-
-        sub = df_info[df_info["bloque"] == bloque]
-
-        for _, row in sub.iterrows():
-
-            st.markdown(f"""
-            **{row['subtipo']}**  
-            {row['contenido']}
-            """)
-
-            if "fuente" in row and pd.notna(row["fuente"]):
-                st.caption(f"Fuente: {row['fuente']}")
+    for _, row in horarios.iterrows():
+        st.write(f"**{row['subtipo']}**: {row['contenido']}")
 
 # =========================================================
-# 11. DEBUG (OCULTO)
+# 10. MOSTRAR TARIFAS
 # =========================================================
 
-with st.expander("Datos técnicos"):
-    st.write("Monumentos filtrados")
-    st.dataframe(df_muni)
+st.markdown("## 💶 Tarifas aplicables")
 
-    st.write("Contenido filtrado")
-    st.dataframe(df_info)
+if tarifas.empty:
+    st.warning("No hay tarifas para esta fecha")
+else:
+    for _, row in tarifas.iterrows():
+        st.write(f"**{row['subtipo']}**: {row['contenido']}")
