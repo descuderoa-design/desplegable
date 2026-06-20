@@ -71,13 +71,18 @@ if monumento_sel == "":
     st.stop()
 
 # =========================================================
-# 6. FECHA (CALENDARIO)
+# 6. FECHA (RESTRICCIONES)
 # =========================================================
+
+hoy = date.today()
+max_fecha = date(hoy.year + 2, hoy.month, hoy.day)
 
 fecha_dt = pd.Timestamp(
     st.date_input(
         "Fecha de visita",
-        value=date.today(),
+        value=hoy,
+        min_value=hoy,
+        max_value=max_fecha,
         format="DD/MM/YYYY"
     )
 )
@@ -85,13 +90,29 @@ fecha_dt = pd.Timestamp(
 fecha_txt = fecha_dt.strftime("%d/%m/%Y")
 
 # =========================================================
-# 7. CONTENIDO
+# 7. DÍA DE LA SEMANA
+# =========================================================
+
+dias_es = {
+    "Monday": "lunes",
+    "Tuesday": "martes",
+    "Wednesday": "miércoles",
+    "Thursday": "jueves",
+    "Friday": "viernes",
+    "Saturday": "sábado",
+    "Sunday": "domingo"
+}
+
+dia_semana = dias_es[fecha_dt.day_name()]
+
+# =========================================================
+# 8. CONTENIDO
 # =========================================================
 
 df_info = df_cont[df_cont["monumento"] == monumento_sel].copy()
 
 # =========================================================
-# 8. PARSEO FECHAS
+# 9. PARSEO FECHAS
 # =========================================================
 
 if "fecha_inicio" in df_info.columns and "fecha_fin" in df_info.columns:
@@ -105,7 +126,7 @@ if "fecha_inicio" in df_info.columns and "fecha_fin" in df_info.columns:
     )
 
 # =========================================================
-# 9. MOTOR DE REGLAS
+# 10. MOTOR DE REGLAS
 # =========================================================
 
 def es_aplicable(row):
@@ -113,7 +134,6 @@ def es_aplicable(row):
     inicio = row.get("fecha_inicio")
     fin = row.get("fecha_fin")
 
-    # sin reglas → siempre aplica
     if pd.isna(inicio) and pd.isna(fin):
         return True
 
@@ -131,13 +151,14 @@ df_info["aplicable"] = df_info.apply(es_aplicable, axis=1)
 df_ok = df_info[df_info["aplicable"]]
 
 # =========================================================
-# 10. OUTPUT
+# 11. OUTPUT
 # =========================================================
 
 st.markdown("---")
 st.markdown(f"# {monumento_sel}")
 
-st.markdown(f"📅 Fecha de visita: **{fecha_txt}**")
+st.markdown(f"📅 Fecha: **{fecha_txt}**")
+st.markdown(f"📆 Día de la semana: **{dia_semana}**")
 
 st.markdown("## 🟢 Condiciones aplicables")
 
