@@ -33,47 +33,44 @@ def load_data():
 df_mon, df_cont = load_data()
 
 # =========================================================
-# 3. VALIDACIÓN BÁSICA
+# 3. VALIDACIÓN MÍNIMA
 # =========================================================
 
 required_mon = {"monumento", "municipio"}
-required_cont = {"monumento", "bloque", "subtipo", "contenido"}
+required_cont = {"monumento", "bloque", "subtipo", "contenido", "fecha_inicio", "fecha_fin"}
 
-if not required_mon.issubset(df_mon.columns):
-    st.error(f"Error columnas monumentos: {df_mon.columns}")
+missing_mon = required_mon - set(df_mon.columns)
+missing_cont = required_cont - set(df_cont.columns)
+
+if missing_mon:
+    st.error(f"Faltan columnas en monumentos: {missing_mon}")
     st.stop()
 
-if not required_cont.issubset(df_cont.columns):
-    st.error(f"Error columnas contenidos: {df_cont.columns}")
+if missing_cont:
+    st.error(f"Faltan columnas en contenidos: {missing_cont}")
     st.stop()
 
 # =========================================================
-# 4. FILTRO MUNICIPIO
+# 4. SELECCIÓN MUNICIPIO
 # =========================================================
 
 municipios = sorted(df_mon["municipio"].dropna().unique())
 
-municipio_sel = st.selectbox(
-    "Selecciona municipio",
-    [""] + municipios
-)
+municipio_sel = st.selectbox("Selecciona municipio", [""] + municipios)
 
 if municipio_sel == "":
-    st.info("Selecciona un municipio para continuar")
+    st.info("Selecciona un municipio para comenzar")
     st.stop()
 
 df_muni = df_mon[df_mon["municipio"] == municipio_sel]
 
 # =========================================================
-# 5. FILTRO MONUMENTO
+# 5. SELECCIÓN MONUMENTO
 # =========================================================
 
 monumentos = sorted(df_muni["monumento"].dropna().unique())
 
-monumento_sel = st.selectbox(
-    "Selecciona monumento",
-    [""] + monumentos
-)
+monumento_sel = st.selectbox("Selecciona monumento", [""] + monumentos)
 
 if monumento_sel == "":
     st.info("Selecciona un monumento")
@@ -84,28 +81,25 @@ if monumento_sel == "":
 # =========================================================
 
 fecha_visita = st.date_input("Selecciona fecha de visita", value=date.today())
-
 fecha_visita = pd.to_datetime(fecha_visita)
 
 # =========================================================
-# 7. FILTRADO DE CONTENIDO
+# 7. FILTRAR CONTENIDO POR MONUMENTO
 # =========================================================
 
 df_info = df_cont[df_cont["monumento"] == monumento_sel].copy()
 
 # =========================================================
-# 8. MOTOR DE REGLAS POR FECHA (SI EXISTE)
+# 8. MOTOR DE REGLAS POR FECHA
 # =========================================================
 
-if "fecha_inicio" in df_info.columns and "fecha_fin" in df_info.columns:
+df_info["fecha_inicio"] = pd.to_datetime(df_info["fecha_inicio"], errors="coerce")
+df_info["fecha_fin"] = pd.to_datetime(df_info["fecha_fin"], errors="coerce")
 
-    df_info["fecha_inicio"] = pd.to_datetime(df_info["fecha_inicio"], errors="coerce")
-    df_info["fecha_fin"] = pd.to_datetime(df_info["fecha_fin"], errors="coerce")
-
-    df_info = df_info[
-        (df_info["fecha_inicio"].isna() | (df_info["fecha_inicio"] <= fecha_visita)) &
-        (df_info["fecha_fin"].isna() | (df_info["fecha_fin"] >= fecha_visita))
-    ]
+df_info = df_info[
+    (df_info["fecha_inicio"].isna() | (df_info["fecha_inicio"] <= fecha_visita)) &
+    (df_info["fecha_fin"].isna() | (df_info["fecha_fin"] >= fecha_visita))
+]
 
 # =========================================================
 # 9. FICHA FINAL
@@ -113,7 +107,7 @@ if "fecha_inicio" in df_info.columns and "fecha_fin" in df_info.columns:
 
 st.markdown("---")
 st.markdown(f"# {monumento_sel}")
-st.markdown(f"📅 Fecha seleccionada: **{fecha_visita.date()}**")
+st.markdown(f"📅 Fecha de visita: **{fecha_visita.date()}**")
 
 # =========================================================
 # 10. RENDER LIMPIO POR BLOQUES
@@ -135,16 +129,9 @@ else:
             {row['contenido']}
             """)
 
-            if "fuente" in row and pd.notna(row["fuente"]):
-                st.caption(f"Fuente: {row['fuente']}")
-
 # =========================================================
-# 11. DEBUG (OCULTO EN EXPANDER)
+# 11. DEBUG OPCIONAL
 # =========================================================
 
-with st.expander("Datos técnicos"):
-    st.write("Monumentos")
-    st.dataframe(df_muni)
-
-    st.write("Contenido filtrado por fecha")
+with st.expander("Datos filtrados (debug)"):
     st.dataframe(df_info)
