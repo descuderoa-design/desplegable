@@ -16,7 +16,7 @@ URL_MONUMENTOS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx
 URL_CONTENIDOS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=contenidos"
 
 # =========================================================
-# 2. CARGA SIN CACHE
+# 2. CARGA
 # =========================================================
 
 def load_data():
@@ -47,7 +47,7 @@ if not required_cont.issubset(df_cont.columns):
     st.stop()
 
 # =========================================================
-# 4. SELECCIÓN MUNICIPIO
+# 4. MUNICIPIO
 # =========================================================
 
 municipios = sorted(df_mon["municipio"].dropna().unique())
@@ -61,7 +61,7 @@ if municipio_sel == "":
 df_muni = df_mon[df_mon["municipio"] == municipio_sel]
 
 # =========================================================
-# 5. SELECCIÓN MONUMENTO
+# 5. MONUMENTO
 # =========================================================
 
 monumentos = sorted(df_muni["monumento"].dropna().unique())
@@ -73,15 +73,18 @@ if monumento_sel == "":
     st.stop()
 
 # =========================================================
-# 6. FECHA (BLOQUEO PASADO)
+# 6. FECHA (SIN VALOR POR DEFECTO)
 # =========================================================
 
-hoy = date.today()
+usar_fecha = st.checkbox("Seleccionar fecha de visita")
+
+if not usar_fecha:
+    st.info("Selecciona una fecha para continuar")
+    st.stop()
 
 fecha_visita = st.date_input(
     "Fecha de visita",
-    value=hoy,
-    min_value=hoy
+    min_value=date.today()
 )
 
 fecha_txt = fecha_visita.strftime("%d/%m/%Y")
@@ -94,7 +97,7 @@ fecha_dt = pd.to_datetime(fecha_visita)
 df_info = df_cont[df_cont["monumento"] == monumento_sel].copy()
 
 # =========================================================
-# 8. PARSEO FECHAS (CON AÑO)
+# 8. PARSEO FECHAS
 # =========================================================
 
 if "fecha_inicio" in df_info.columns and "fecha_fin" in df_info.columns:
@@ -116,26 +119,22 @@ def es_aplicable(row):
     inicio = row.get("fecha_inicio")
     fin = row.get("fecha_fin")
 
-    # sin fechas → siempre aplica
     if pd.isna(inicio) and pd.isna(fin):
         return True
 
-    # solo fin
     if pd.isna(inicio) and pd.notna(fin):
         return fecha_dt <= fin
 
-    # solo inicio
     if pd.notna(inicio) and pd.isna(fin):
         return fecha_dt >= inicio
 
-    # rango completo
     return inicio <= fecha_dt <= fin
 
 
 df_info["aplicable"] = df_info.apply(es_aplicable, axis=1)
 
-df_ok = df_info[df_info["aplicable"] == True]
-df_no = df_info[df_info["aplicable"] == False]
+df_ok = df_info[df_info["aplicable"]]
+df_no = df_info[~df_info["aplicable"]]
 
 # =========================================================
 # 10. OUTPUT
@@ -155,7 +154,6 @@ if df_ok.empty:
     st.warning("No hay condiciones aplicables para esta fecha")
 else:
     for bloque in df_ok["bloque"].dropna().unique():
-
         st.markdown(f"### {bloque.capitalize()}")
 
         sub = df_ok[df_ok["bloque"] == bloque]
@@ -174,17 +172,9 @@ if df_no.empty:
     st.info("No hay condiciones fuera de esta fecha")
 else:
     for bloque in df_no["bloque"].dropna().unique():
-
         st.markdown(f"### {bloque.capitalize()}")
 
         sub = df_no[df_no["bloque"] == bloque]
 
         for _, row in sub.iterrows():
             st.write(f"**{row['subtipo']}**: {row['contenido']}")
-
-# =========================================================
-# 11. DEBUG
-# =========================================================
-
-with st.expander("Datos técnicos"):
-    st.dataframe(df_info)
