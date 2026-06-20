@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from datetime import date
 
 st.set_page_config(page_title="CMS Monumentos Cantabria", layout="wide")
 
@@ -47,7 +48,7 @@ if not required_cont.issubset(df_cont.columns):
     st.stop()
 
 # =========================================================
-# 4. SELECTOR MUNICIPIO (NO MUESTRA NADA SIN SELECCIÓN)
+# 4. FILTRO MUNICIPIO
 # =========================================================
 
 municipios = sorted(df_mon["municipio"].dropna().unique())
@@ -58,13 +59,13 @@ municipio_sel = st.selectbox(
 )
 
 if municipio_sel == "":
-    st.info("Selecciona un municipio para comenzar")
+    st.info("Selecciona un municipio para continuar")
     st.stop()
 
 df_muni = df_mon[df_mon["municipio"] == municipio_sel]
 
 # =========================================================
-# 5. SELECTOR MONUMENTO
+# 5. FILTRO MONUMENTO
 # =========================================================
 
 monumentos = sorted(df_muni["monumento"].dropna().unique())
@@ -79,28 +80,49 @@ if monumento_sel == "":
     st.stop()
 
 # =========================================================
-# 6. FILTRAR CONTENIDO
+# 6. FECHA DE VISITA (VARIABLE DE REGLA)
 # =========================================================
 
-df_info = df_cont[df_cont["monumento"] == monumento_sel]
+fecha_visita = st.date_input("Selecciona fecha de visita", value=date.today())
+
+fecha_visita = pd.to_datetime(fecha_visita)
 
 # =========================================================
-# 7. FICHA LIMPIA
+# 7. FILTRADO DE CONTENIDO
+# =========================================================
+
+df_info = df_cont[df_cont["monumento"] == monumento_sel].copy()
+
+# =========================================================
+# 8. MOTOR DE REGLAS POR FECHA (SI EXISTE)
+# =========================================================
+
+if "fecha_inicio" in df_info.columns and "fecha_fin" in df_info.columns:
+
+    df_info["fecha_inicio"] = pd.to_datetime(df_info["fecha_inicio"], errors="coerce")
+    df_info["fecha_fin"] = pd.to_datetime(df_info["fecha_fin"], errors="coerce")
+
+    df_info = df_info[
+        (df_info["fecha_inicio"].isna() | (df_info["fecha_inicio"] <= fecha_visita)) &
+        (df_info["fecha_fin"].isna() | (df_info["fecha_fin"] >= fecha_visita))
+    ]
+
+# =========================================================
+# 9. FICHA FINAL
 # =========================================================
 
 st.markdown("---")
 st.markdown(f"# {monumento_sel}")
+st.markdown(f"📅 Fecha seleccionada: **{fecha_visita.date()}**")
 
 # =========================================================
-# 8. RENDER CMS LIMPIO
+# 10. RENDER LIMPIO POR BLOQUES
 # =========================================================
 
 if df_info.empty:
-    st.warning("No hay información disponible para este monumento")
+    st.warning("No hay información disponible para esta fecha")
 else:
-    bloques = df_info["bloque"].dropna().unique()
-
-    for bloque in bloques:
+    for bloque in df_info["bloque"].dropna().unique():
 
         st.markdown(f"## {bloque.capitalize()}")
 
@@ -108,20 +130,21 @@ else:
 
         for _, row in sub.iterrows():
 
-            st.markdown(
-                f"""
-                **{row['subtipo']}**  
-                {row['contenido']}
-                """
-            )
+            st.markdown(f"""
+            **{row['subtipo']}**  
+            {row['contenido']}
+            """)
+
+            if "fuente" in row and pd.notna(row["fuente"]):
+                st.caption(f"Fuente: {row['fuente']}")
 
 # =========================================================
-# 9. INFO OPCIONAL (OCULTA EN EXPANDER)
+# 11. DEBUG (OCULTO EN EXPANDER)
 # =========================================================
 
-with st.expander("Información técnica"):
-    st.write("Monumentos filtrados")
+with st.expander("Datos técnicos"):
+    st.write("Monumentos")
     st.dataframe(df_muni)
 
-    st.write("Contenido filtrado")
+    st.write("Contenido filtrado por fecha")
     st.dataframe(df_info)
