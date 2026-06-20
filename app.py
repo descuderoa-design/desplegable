@@ -73,7 +73,7 @@ if monumento_sel == "":
     st.stop()
 
 # =========================================================
-# 6. FECHA
+# 6. FECHA DE VISITA
 # =========================================================
 
 fecha_visita = st.date_input("Fecha de visita", value=date.today())
@@ -87,40 +87,62 @@ fecha_visita_dt = pd.to_datetime(fecha_visita)
 df_info = df_cont[df_cont["monumento"] == monumento_sel].copy()
 
 # =========================================================
-# 8. REGLAS POR FECHA (SI EXISTEN)
+# 8. TEMPORADAS SIN AÑO (MMDD)
 # =========================================================
+
+def to_mmdd(dt):
+    return int(dt.strftime("%m%d"))
+
+hoy = to_mmdd(fecha_visita_dt)
 
 if "fecha_inicio" in df_info.columns and "fecha_fin" in df_info.columns:
 
-    df_info["fecha_inicio"] = pd.to_datetime(df_info["fecha_inicio"], dayfirst=True, errors="coerce")
-    df_info["fecha_fin"] = pd.to_datetime(df_info["fecha_fin"], dayfirst=True, errors="coerce")
+    df_info["fecha_inicio_dt"] = pd.to_datetime(df_info["fecha_inicio"], dayfirst=True, errors="coerce")
+    df_info["fecha_fin_dt"] = pd.to_datetime(df_info["fecha_fin"], dayfirst=True, errors="coerce")
+
+    df_info["inicio_mmdd"] = df_info["fecha_inicio_dt"].dt.strftime("%m%d")
+    df_info["fin_mmdd"] = df_info["fecha_fin_dt"].dt.strftime("%m%d")
 
     def es_aplicable(row):
-        inicio = row.get("fecha_inicio")
-        fin = row.get("fecha_fin")
-
-        if pd.isna(inicio) and pd.isna(fin):
+        if pd.isna(row["inicio_mmdd"]) and pd.isna(row["fin_mmdd"]):
             return True
-        if pd.isna(inicio):
-            return fecha_visita_dt <= fin
-        if pd.isna(fin):
-            return fecha_visita_dt >= inicio
-        return inicio <= fecha_visita_dt <= fin
+
+        inicio = int(row["inicio_mmdd"]) if pd.notna(row["inicio_mmdd"]) else None
+        fin = int(row["fin_mmdd"]) if pd.notna(row["fin_mmdd"]) else None
+
+        # caso normal (no cruza año)
+        if inicio is not None and fin is not None and inicio <= fin:
+            return inicio <= hoy <= fin
+
+        # caso temporada cruzando año (ej: invierno 11-03)
+        if inicio is not None and fin is not None:
+            return hoy >= inicio or hoy <= fin
+
+        return True
 
     df_info["aplicable"] = df_info.apply(es_aplicable, axis=1)
+
 else:
     df_info["aplicable"] = True
+
+# =========================================================
+# 9. SPLIT RESULTADOS
+# =========================================================
 
 df_ok = df_info[df_info["aplicable"] == True]
 df_no = df_info[df_info["aplicable"] == False]
 
 # =========================================================
-# 9. SALIDA
+# 10. OUTPUT
 # =========================================================
 
 st.markdown("---")
 st.markdown(f"# {monumento_sel}")
 st.markdown(f"📅 Fecha de visita: **{fecha_visita_txt}**")
+
+# -----------------------------
+# APLICABLES
+# -----------------------------
 
 st.markdown("## 🟢 Condiciones aplicables")
 
@@ -128,20 +150,28 @@ if df_ok.empty:
     st.warning("No hay condiciones aplicables")
 else:
     for bloque in df_ok["bloque"].dropna().unique():
+
         st.markdown(f"### {bloque.capitalize()}")
+
         sub = df_ok[df_ok["bloque"] == bloque]
 
         for _, row in sub.iterrows():
             st.write(f"**{row['subtipo']}**: {row['contenido']}")
 
+# -----------------------------
+# NO APLICABLES
+# -----------------------------
+
 st.markdown("---")
 st.markdown("## 🔴 Condiciones no aplicables")
 
 if df_no.empty:
-    st.info("No hay condiciones fuera de esta fecha")
+    st.info("No hay condiciones fuera de temporada")
 else:
     for bloque in df_no["bloque"].dropna().unique():
+
         st.markdown(f"### {bloque.capitalize()}")
+
         sub = df_no[df_no["bloque"] == bloque]
 
         for _, row in sub.iterrows():
