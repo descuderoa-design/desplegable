@@ -16,10 +16,9 @@ URL_MONUMENTOS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx
 URL_CONTENIDOS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=contenidos"
 
 # =========================================================
-# 2. CARGA DE DATOS
+# 2. CARGA DE DATOS (SIN CACHE)
 # =========================================================
 
-@st.cache_data
 def load_data():
     df_mon = pd.read_csv(URL_MONUMENTOS)
     df_cont = pd.read_csv(URL_CONTENIDOS)
@@ -33,7 +32,7 @@ def load_data():
 df_mon, df_cont = load_data()
 
 # =========================================================
-# 3. VALIDACIÓN MÍNIMA
+# 3. VALIDACIÓN
 # =========================================================
 
 required_mon = {"monumento", "municipio"}
@@ -74,58 +73,40 @@ if monumento_sel == "":
     st.stop()
 
 # =========================================================
-# 6. FECHA (VISUAL dd/mm/yyyy + LÓGICA datetime)
+# 6. FECHA
 # =========================================================
 
 fecha_visita = st.date_input("Fecha de visita", value=date.today())
-
-# formato visual europeo
 fecha_visita_txt = fecha_visita.strftime("%d/%m/%Y")
-
-# formato interno para lógica
 fecha_visita_dt = pd.to_datetime(fecha_visita)
 
 # =========================================================
-# 7. FILTRADO CONTENIDO
+# 7. CONTENIDO
 # =========================================================
 
 df_info = df_cont[df_cont["monumento"] == monumento_sel].copy()
 
 # =========================================================
-# 8. FECHAS DE REGLAS (SI EXISTEN)
+# 8. REGLAS POR FECHA (SI EXISTEN)
 # =========================================================
 
 if "fecha_inicio" in df_info.columns and "fecha_fin" in df_info.columns:
 
-    df_info["fecha_inicio"] = pd.to_datetime(
-        df_info["fecha_inicio"], dayfirst=True, errors="coerce"
-    )
+    df_info["fecha_inicio"] = pd.to_datetime(df_info["fecha_inicio"], dayfirst=True, errors="coerce")
+    df_info["fecha_fin"] = pd.to_datetime(df_info["fecha_fin"], dayfirst=True, errors="coerce")
 
-    df_info["fecha_fin"] = pd.to_datetime(
-        df_info["fecha_fin"], dayfirst=True, errors="coerce"
-    )
+    def es_aplicable(row):
+        inicio = row.get("fecha_inicio")
+        fin = row.get("fecha_fin")
 
-# =========================================================
-# 9. MOTOR DE REGLAS
-# =========================================================
+        if pd.isna(inicio) and pd.isna(fin):
+            return True
+        if pd.isna(inicio):
+            return fecha_visita_dt <= fin
+        if pd.isna(fin):
+            return fecha_visita_dt >= inicio
+        return inicio <= fecha_visita_dt <= fin
 
-def es_aplicable(row):
-    inicio = row.get("fecha_inicio")
-    fin = row.get("fecha_fin")
-
-    if pd.isna(inicio) and pd.isna(fin):
-        return True
-
-    if pd.isna(inicio):
-        return fecha_visita_dt <= fin
-
-    if pd.isna(fin):
-        return fecha_visita_dt >= inicio
-
-    return inicio <= fecha_visita_dt <= fin
-
-
-if "fecha_inicio" in df_info.columns and "fecha_fin" in df_info.columns:
     df_info["aplicable"] = df_info.apply(es_aplicable, axis=1)
 else:
     df_info["aplicable"] = True
@@ -134,34 +115,24 @@ df_ok = df_info[df_info["aplicable"] == True]
 df_no = df_info[df_info["aplicable"] == False]
 
 # =========================================================
-# 10. CABECERA
+# 9. SALIDA
 # =========================================================
 
 st.markdown("---")
 st.markdown(f"# {monumento_sel}")
 st.markdown(f"📅 Fecha de visita: **{fecha_visita_txt}**")
 
-# =========================================================
-# 11. APLICABLES
-# =========================================================
-
 st.markdown("## 🟢 Condiciones aplicables")
 
 if df_ok.empty:
-    st.warning("No hay condiciones aplicables para esta fecha")
+    st.warning("No hay condiciones aplicables")
 else:
     for bloque in df_ok["bloque"].dropna().unique():
-
         st.markdown(f"### {bloque.capitalize()}")
-
         sub = df_ok[df_ok["bloque"] == bloque]
 
         for _, row in sub.iterrows():
             st.write(f"**{row['subtipo']}**: {row['contenido']}")
-
-# =========================================================
-# 12. NO APLICABLES
-# =========================================================
 
 st.markdown("---")
 st.markdown("## 🔴 Condiciones no aplicables")
@@ -170,15 +141,8 @@ if df_no.empty:
     st.info("No hay condiciones fuera de esta fecha")
 else:
     for bloque in df_no["bloque"].dropna().unique():
-
         st.markdown(f"### {bloque.capitalize()}")
-
         sub = df_no[df_no["bloque"] == bloque]
 
         for _, row in sub.iterrows():
-            fecha_info = ""
-
-            if "fecha_inicio" in row and "fecha_fin" in row:
-                fecha_info = f" (vigencia: {row['fecha_inicio']} → {row['fecha_fin']})"
-
-            st.write(f"**{row['subtipo']}**: {row['contenido']}{fecha_info}")
+            st.write(f"**{row['subtipo']}**: {row['contenido']}")
