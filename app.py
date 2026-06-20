@@ -51,6 +51,7 @@ if not required_cont.issubset(df_cont.columns):
 # =========================================================
 
 municipios = sorted(df_mon["municipio"].dropna().unique())
+
 municipio_sel = st.selectbox("Selecciona municipio", [""] + municipios)
 
 if municipio_sel == "":
@@ -59,13 +60,14 @@ if municipio_sel == "":
 df_muni = df_mon[df_mon["municipio"] == municipio_sel]
 
 monumentos = sorted(df_muni["monumento"].dropna().unique())
+
 monumento_sel = st.selectbox("Selecciona monumento", [""] + monumentos)
 
 if monumento_sel == "":
     st.stop()
 
 # =========================================================
-# 5. INFORMACIÓN FIJA DEL MONUMENTO
+# 5. INFORMACIÓN FIJA (MONUMENTO)
 # =========================================================
 
 info_monumento = df_muni[df_muni["monumento"] == monumento_sel]
@@ -117,7 +119,7 @@ dia_semana = dias_es[fecha_dt.day_name()]
 df_info = df_cont[df_cont["monumento"] == monumento_sel].copy()
 
 # =========================================================
-# 9. TEMPORADAS
+# 9. TEMPORADAS (FECHAS)
 # =========================================================
 
 if "fecha_inicio" in df_info.columns and "fecha_fin" in df_info.columns:
@@ -166,31 +168,11 @@ def cumple_dia(row):
 df_info = df_info[df_info.apply(cumple_dia, axis=1)]
 
 # =========================================================
-# 11. OUTPUT
+# 11. OUTPUT PRINCIPAL
 # =========================================================
 
 st.markdown("---")
 st.markdown(f"# {monumento_sel}")
-
-# =========================================================
-# INFORMACIÓN FIJA
-# =========================================================
-
-if info_monumento is not None:
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        if "ultima_actualizacion" in info_monumento and pd.notna(info_monumento["ultima_actualizacion"]):
-            st.info(f"🕒 Última actualización: {info_monumento['ultima_actualizacion']}")
-
-    with col2:
-        if "web_oficial" in info_monumento and pd.notna(info_monumento["web_oficial"]):
-            st.markdown(f"🌐 [Página oficial]({info_monumento['web_oficial']})")
-
-# =========================================================
-# INFORMACIÓN DINÁMICA
-# =========================================================
 
 st.markdown(f"📅 Fecha: **{fecha_txt}**")
 st.markdown(f"📆 Día de la semana: **{dia_semana}**")
@@ -208,3 +190,21 @@ else:
 
         for _, row in sub.iterrows():
             st.write(f"**{row['subtipo']}**: {row['contenido']}")
+
+# =========================================================
+# 12. INFORMACIÓN FIJA (AL FINAL)
+# =========================================================
+
+if info_monumento is not None:
+
+    st.markdown("---")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if "ultima_actualizacion" in info_monumento and pd.notna(info_monumento["ultima_actualizacion"]):
+            st.info(f"🕒 Última actualización: {info_monumento['ultima_actualizacion']}")
+
+    with col2:
+        if "web_oficial" in info_monumento and pd.notna(info_monumento["web_oficial"]):
+            st.markdown(f"🌐 [Página oficial]({info_monumento['web_oficial']})")
