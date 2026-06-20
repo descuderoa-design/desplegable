@@ -100,6 +100,6 @@ else:
 with st.expander("Datos técnicos"):
     st.write("Monumentos filtrados")
     st.dataframe(df_muni)
-
+st.write(df_cont.columns)
     st.write("Contenido filtrado")
     st.dataframe(df_info)
