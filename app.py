@@ -16,7 +16,7 @@ URL_MONUMENTOS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx
 URL_CONTENIDOS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=contenidos"
 
 # =========================================================
-# 2. CARGA
+# 2. LOAD DATA
 # =========================================================
 
 def load_data():
@@ -47,11 +47,10 @@ if not required_cont.issubset(df_cont.columns):
     st.stop()
 
 # =========================================================
-# 4. MUNICIPIO
+# 4. SELECCIÓN
 # =========================================================
 
 municipios = sorted(df_mon["municipio"].dropna().unique())
-
 municipio_sel = st.selectbox("Selecciona municipio", [""] + municipios)
 
 if municipio_sel == "":
@@ -59,27 +58,36 @@ if municipio_sel == "":
 
 df_muni = df_mon[df_mon["municipio"] == municipio_sel]
 
-# =========================================================
-# 5. MONUMENTO
-# =========================================================
-
 monumentos = sorted(df_muni["monumento"].dropna().unique())
-
 monumento_sel = st.selectbox("Selecciona monumento", [""] + monumentos)
 
 if monumento_sel == "":
     st.stop()
 
 # =========================================================
-# 6. FECHA
+# 5. INFORMACIÓN FIJA DEL MONUMENTO
 # =========================================================
+
+info_monumento = df_muni[df_muni["monumento"] == monumento_sel]
+
+if not info_monumento.empty:
+    info_monumento = info_monumento.iloc[0]
+else:
+    info_monumento = None
+
+# =========================================================
+# 6. FECHA (CALENDARIO LIMITADO)
+# =========================================================
+
+hoy = date.today()
+max_fecha = date(hoy.year + 2, hoy.month, hoy.day)
 
 fecha_dt = pd.Timestamp(
     st.date_input(
         "Fecha de visita",
-        value=date.today(),
-        min_value=date.today(),
-        max_value=date(date.today().year + 2, date.today().month, date.today().day),
+        value=hoy,
+        min_value=hoy,
+        max_value=max_fecha,
         format="DD/MM/YYYY"
     )
 )
@@ -109,7 +117,7 @@ dia_semana = dias_es[fecha_dt.day_name()]
 df_info = df_cont[df_cont["monumento"] == monumento_sel].copy()
 
 # =========================================================
-# 9. FECHAS (TEMPORADAS)
+# 9. TEMPORADAS
 # =========================================================
 
 if "fecha_inicio" in df_info.columns and "fecha_fin" in df_info.columns:
@@ -138,10 +146,11 @@ def cumple_fecha(row):
 
     return inicio <= fecha_dt <= fin
 
+
 df_info = df_info[df_info.apply(cumple_fecha, axis=1)]
 
 # =========================================================
-# 10. FILTRO DÍAS DE LA SEMANA
+# 10. DÍA DE LA SEMANA
 # =========================================================
 
 def cumple_dia(row):
@@ -162,6 +171,26 @@ df_info = df_info[df_info.apply(cumple_dia, axis=1)]
 
 st.markdown("---")
 st.markdown(f"# {monumento_sel}")
+
+# =========================================================
+# INFORMACIÓN FIJA
+# =========================================================
+
+if info_monumento is not None:
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if "ultima_actualizacion" in info_monumento and pd.notna(info_monumento["ultima_actualizacion"]):
+            st.info(f"🕒 Última actualización: {info_monumento['ultima_actualizacion']}")
+
+    with col2:
+        if "web_oficial" in info_monumento and pd.notna(info_monumento["web_oficial"]):
+            st.markdown(f"🌐 [Página oficial]({info_monumento['web_oficial']})")
+
+# =========================================================
+# INFORMACIÓN DINÁMICA
+# =========================================================
 
 st.markdown(f"📅 Fecha: **{fecha_txt}**")
 st.markdown(f"📆 Día de la semana: **{dia_semana}**")
