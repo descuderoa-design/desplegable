@@ -23,9 +23,8 @@ def load_data():
     df_mon = pd.read_csv(URL_MONUMENTOS)
     df_cont = pd.read_csv(URL_CONTENIDOS)
 
-    # limpieza ligera (sin romper nombres reales)
-    df_mon.columns = df_mon.columns.str.strip()
-    df_cont.columns = df_cont.columns.str.strip()
+    df_mon.columns = df_mon.columns.str.strip().str.lower()
+    df_cont.columns = df_cont.columns.str.strip().str.lower()
 
     return df_mon, df_cont
 
@@ -36,75 +35,91 @@ df_mon, df_cont = load_data()
 # 3. VALIDACIÓN BÁSICA
 # =========================================================
 
-required_mon = {"monumento", "municipio", "tipo", "activo", "prioridad"}
-required_cont = {"monumento", "bloque", "subtipo", "contenido", "fuente", "actualizado"}
+required_mon = {"monumento", "municipio"}
+required_cont = {"monumento", "bloque", "subtipo", "contenido"}
 
-if not required_mon.issubset(set(df_mon.columns)):
-    st.error(f"Error en 'monumentos'. Columnas detectadas: {list(df_mon.columns)}")
+if not required_mon.issubset(df_mon.columns):
+    st.error(f"Error columnas monumentos: {df_mon.columns}")
     st.stop()
 
-if not required_cont.issubset(set(df_cont.columns)):
-    st.error(f"Error en 'contenidos'. Columnas detectadas: {list(df_cont.columns)}")
+if not required_cont.issubset(df_cont.columns):
+    st.error(f"Error columnas contenidos: {df_cont.columns}")
     st.stop()
 
 # =========================================================
-# 4. FILTRO MUNICIPIO
+# 4. SELECTOR MUNICIPIO (NO MUESTRA NADA SIN SELECCIÓN)
 # =========================================================
 
 municipios = sorted(df_mon["municipio"].dropna().unique())
-municipio_sel = st.selectbox("Municipio", municipios)
+
+municipio_sel = st.selectbox(
+    "Selecciona municipio",
+    [""] + municipios
+)
+
+if municipio_sel == "":
+    st.info("Selecciona un municipio para comenzar")
+    st.stop()
 
 df_muni = df_mon[df_mon["municipio"] == municipio_sel]
 
 # =========================================================
-# 5. FILTRO MONUMENTO
+# 5. SELECTOR MONUMENTO
 # =========================================================
 
 monumentos = sorted(df_muni["monumento"].dropna().unique())
 
-if len(monumentos) == 0:
-    st.warning("No hay monumentos en este municipio")
+monumento_sel = st.selectbox(
+    "Selecciona monumento",
+    [""] + monumentos
+)
+
+if monumento_sel == "":
+    st.info("Selecciona un monumento")
     st.stop()
 
-monumento_sel = st.selectbox("Monumento", monumentos)
-
 # =========================================================
-# 6. CONTENIDO CMS
+# 6. FILTRAR CONTENIDO
 # =========================================================
 
 df_info = df_cont[df_cont["monumento"] == monumento_sel]
+
+# =========================================================
+# 7. FICHA LIMPIA
+# =========================================================
 
 st.markdown("---")
 st.markdown(f"# {monumento_sel}")
 
 # =========================================================
-# 7. RENDER CMS
+# 8. RENDER CMS LIMPIO
 # =========================================================
 
 if df_info.empty:
-    st.warning("No hay información disponible")
+    st.warning("No hay información disponible para este monumento")
 else:
-    for bloque in df_info["bloque"].dropna().unique():
+    bloques = df_info["bloque"].dropna().unique()
 
-        st.markdown(f"## {bloque.upper()}")
+    for bloque in bloques:
+
+        st.markdown(f"## {bloque.capitalize()}")
 
         sub = df_info[df_info["bloque"] == bloque]
 
         for _, row in sub.iterrows():
-            st.write(f"**{row['subtipo']}**: {row['contenido']}")
 
-            # info extra opcional (solo si existe)
-            if "fuente" in row and pd.notna(row["fuente"]):
-                st.caption(f"Fuente: {row['fuente']}")
-
-            if "actualizado" in row and pd.notna(row["actualizado"]):
-                st.caption(f"Actualizado: {row['actualizado']}")
+            st.markdown(
+                f"""
+                **{row['subtipo']}**  
+                {row['contenido']}
+                """
+            )
 
 # =========================================================
-# 8. DEBUG
+# 9. INFO OPCIONAL (OCULTA EN EXPANDER)
 # =========================================================
 
-with st.expander("Datos técnicos"):
+with st.expander("Información técnica"):
     st.write("Monumentos filtrados")
     st.dataframe(df_muni)
 
